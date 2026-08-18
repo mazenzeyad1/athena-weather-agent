@@ -233,6 +233,14 @@
         return sorted;
       };
 
+      // Ask the host to shrink/grow the iframe to match our actual content.
+      const notifyHeight = () => {
+        const card = document.querySelector("main");
+        if (!card) return;
+        const height = Math.ceil(card.getBoundingClientRect().height) + 40;
+        window.openai?.notifyIntrinsicHeight?.(height);
+      };
+
       const render = () => {
         const errorBox = document.querySelector("#error-box");
         errorBox.classList.remove("visible");
@@ -290,6 +298,8 @@
         } else {
           moreBtn.style.display = "none";
         }
+
+        notifyHeight();
       };
 
       // Filter chips
@@ -368,6 +378,11 @@
       });
 
       render();
+
+      // Catch any layout settling (fonts, wrapping) after first paint.
+      if (window.ResizeObserver) {
+        new ResizeObserver(notifyHeight).observe(document.querySelector("main"));
+      }
     </script>
   </body>
 </html>
