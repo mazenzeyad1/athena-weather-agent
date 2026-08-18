@@ -1,6 +1,6 @@
 {
-  "name": "athena-weather-agent-server",
-  "version": "0.1.0",
+  "name": "athena-earthquake-explorer",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "start": "node server.js"

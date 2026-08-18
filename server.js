@@ -9,78 +9,109 @@ const widgetHtml = readFileSync(
   "utf8"
 );
 
-const WEATHER_CODES = {
-  0: "Clear sky",
-  1: "Mainly clear",
-  2: "Partly cloudy",
-  3: "Overcast",
-  45: "Fog",
-  48: "Depositing rime fog",
-  51: "Light drizzle",
-  61: "Slight rain",
-  63: "Moderate rain",
-  65: "Heavy rain",
-  71: "Slight snow",
-  73: "Moderate snow",
-  75: "Heavy snow",
-  80: "Rain showers",
-  95: "Thunderstorm",
+const PERIOD_MS = {
+  hour: 60 * 60 * 1000,
+  day: 24 * 60 * 60 * 1000,
+  week: 7 * 24 * 60 * 60 * 1000,
+  month: 30 * 24 * 60 * 60 * 1000,
 };
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const SEARCH_RADIUS_KM = 1500;
+const MAX_EVENTS = 20;
 
-// --- Real business logic: geocode a city, then fetch live forecast data ---
-async function fetchWeatherForCity(city) {
-  const geoRes = await fetch(
+// Resolve a place name to coordinates so we can search a region, not just the globe.
+async function geocodeRegion(region) {
+  const res = await fetch(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-      city
+      region
     )}&count=1&language=en&format=json`
   );
-  if (!geoRes.ok) throw new Error(`Geocoding failed: ${geoRes.status}`);
-  const geoData = await geoRes.json();
-  const place = geoData?.results?.[0];
-  if (!place) throw new Error(`Could not find location: ${city}`);
+  if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
+  const data = await res.json();
+  const place = data?.results?.[0];
+  if (!place) throw new Error(`Could not find region: ${region}`);
+  const parts = [place.name, place.country].filter(Boolean);
+  return {
+    label: [...new Set(parts)].join(", "),
+    latitude: place.latitude,
+    longitude: place.longitude,
+  };
+}
 
-  const { latitude, longitude, name, country } = place;
+// --- Real business logic: live seismic events from the USGS FDSN event API ---
+async function fetchEarthquakes({ region, minMagnitude, period }) {
+  const windowMs = PERIOD_MS[period] ?? PERIOD_MS.day;
+  const startTime = new Date(Date.now() - windowMs).toISOString();
 
-  const forecastRes = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
-      `&current=temperature_2m,wind_speed_10m,weather_code` +
-      `&daily=temperature_2m_max,temperature_2m_min,weather_code` +
-      `&timezone=auto&forecast_days=5`
+  const params = new URLSearchParams({
+    format: "geojson",
+    starttime: startTime,
+    minmagnitude: String(minMagnitude),
+    orderby: "time",
+    limit: String(MAX_EVENTS),
+  });
+
+  let regionLabel = "Worldwide";
+  let center = null;
+
+  if (region) {
+    const place = await geocodeRegion(region);
+    regionLabel = place.label;
+    center = { latitude: place.latitude, longitude: place.longitude };
+    params.set("latitude", String(place.latitude));
+    params.set("longitude", String(place.longitude));
+    params.set("maxradiuskm", String(SEARCH_RADIUS_KM));
+  }
+
+  const res = await fetch(
+    `https://earthquake.usgs.gov/fdsnws/event/1/query?${params.toString()}`
   );
-  if (!forecastRes.ok) throw new Error(`Forecast fetch failed: ${forecastRes.status}`);
-  const forecastData = await forecastRes.json();
+  if (!res.ok) throw new Error(`USGS query failed: ${res.status}`);
+  const data = await res.json();
 
-  const current = forecastData.current;
-  const daily = forecastData.daily;
+  const quakes = (data.features ?? []).map((feature) => {
+    const [lon, lat, depth] = feature.geometry?.coordinates ?? [];
+    return {
+      id: feature.id,
+      magnitude: Math.round((feature.properties.mag ?? 0) * 10) / 10,
+      place: feature.properties.place ?? "Unknown location",
+      time: new Date(feature.properties.time).toISOString(),
+      depthKm: Math.round((depth ?? 0) * 10) / 10,
+      lat: Math.round((lat ?? 0) * 100) / 100,
+      lon: Math.round((lon ?? 0) * 100) / 100,
+      tsunami: Boolean(feature.properties.tsunami),
+      url: feature.properties.url ?? "",
+    };
+  });
 
-  const forecast = daily.time.map((dateStr, i) => ({
-    day: DAY_NAMES[new Date(dateStr).getUTCDay()],
-    highC: Math.round(daily.temperature_2m_max[i]),
-    lowC: Math.round(daily.temperature_2m_min[i]),
-    conditions: WEATHER_CODES[daily.weather_code[i]] ?? "Unknown",
-  }));
+  const magnitudes = quakes.map((q) => q.magnitude);
 
   return {
-    city: `${name}, ${country}`,
-    currentTempC: Math.round(current.temperature_2m),
-    windSpeedKmh: Math.round(current.wind_speed_10m),
-    conditions: WEATHER_CODES[current.weather_code] ?? "Unknown",
-    forecast,
+    region: regionLabel,
+    query: region ?? null,
+    center,
+    radiusKm: region ? SEARCH_RADIUS_KM : null,
+    period,
+    minMagnitude,
+    count: quakes.length,
+    maxMagnitude: magnitudes.length ? Math.max(...magnitudes) : 0,
+    strongest: quakes.length
+      ? quakes.reduce((a, b) => (b.magnitude > a.magnitude ? b : a)).place
+      : null,
+    quakes,
     updatedAt: new Date().toISOString(),
   };
 }
 
-function createWeatherServer() {
-  const server = new McpServer({ name: "weather-agent", version: "0.1.0" });
+function createEarthquakeServer() {
+  const server = new McpServer({ name: "earthquake-explorer", version: "1.0.0" });
 
   server.registerResource(
-    "weather-widget",
-    "ui://widget/weather.html",
+    "earthquake-widget",
+    "ui://widget/earthquakes.html",
     {
-      title: "Weather widget",
-      description: "Interactive current conditions and 5-day forecast card.",
+      title: "Earthquake activity explorer",
+      description: "Interactive list of recent seismic events with filters and sorting.",
       mimeType: "text/html+skybridge",
       _meta: {
         "openai/widgetPrefersBorder": true,
@@ -93,7 +124,7 @@ function createWeatherServer() {
     async () => ({
       contents: [
         {
-          uri: "ui://widget/weather.html",
+          uri: "ui://widget/earthquakes.html",
           mimeType: "text/html+skybridge",
           text: widgetHtml,
           _meta: {
@@ -109,42 +140,62 @@ function createWeatherServer() {
   );
 
   server.registerTool(
-    "get_weather",
+    "explore_earthquakes",
     {
-      title: "Get weather",
+      title: "Explore earthquake activity",
       description:
-        "Use this when the user asks for the current weather or forecast for a city. Fetches real, live data from the Open-Meteo public API.",
-      inputSchema: { city: z.string().min(1) },
+        "Use this when the user asks about earthquakes, seismic activity, tremors, or recent quakes — worldwide or near a specific place. Fetches real, live event data from the USGS earthquake catalog.",
+      inputSchema: {
+        region: z
+          .string()
+          .optional()
+          .describe(
+            "Optional place name to search around (e.g. 'Japan', 'California', 'Istanbul'). Omit for worldwide activity."
+          ),
+        minMagnitude: z
+          .number()
+          .min(0)
+          .max(10)
+          .optional()
+          .describe("Minimum magnitude to include. Defaults to 4.5."),
+        period: z
+          .enum(["hour", "day", "week", "month"])
+          .optional()
+          .describe("How far back to search. Defaults to 'day'."),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
         openWorldHint: true,
       },
       _meta: {
-        "openai/outputTemplate": "ui://widget/weather.html",
-        "openai/toolInvocation/invoking": "Fetching live weather data",
-        "openai/toolInvocation/invoked": "Weather data loaded",
+        "openai/outputTemplate": "ui://widget/earthquakes.html",
+        "openai/toolInvocation/invoking": "Querying live seismic data",
+        "openai/toolInvocation/invoked": "Earthquake data loaded",
         "openai/widgetAccessible": true,
       },
     },
-    async ({ city }) => {
+    async ({ region, minMagnitude = 4.5, period = "day" }) => {
       try {
-        const result = await fetchWeatherForCity(city);
+        const result = await fetchEarthquakes({ region, minMagnitude, period });
+
+        const summary = result.count
+          ? `Found ${result.count} earthquake${result.count === 1 ? "" : "s"} of M${result.minMagnitude}+ ` +
+            `in the past ${result.period} (${result.region}). Strongest: M${result.maxMagnitude} near ${result.strongest}.`
+          : `No earthquakes of M${result.minMagnitude}+ recorded in the past ${result.period} (${result.region}).`;
+
         return {
-          content: [
-            {
-              type: "text",
-              text: `Current weather in ${result.city}: ${result.currentTempC}°C, ${result.conditions}.`,
-            },
-          ],
+          content: [{ type: "text", text: summary }],
           structuredContent: result,
           _meta: {
-            "openai/outputTemplate": "ui://widget/weather.html",
+            "openai/outputTemplate": "ui://widget/earthquakes.html",
           },
         };
       } catch (err) {
         return {
-          content: [{ type: "text", text: `Could not fetch weather: ${err.message}` }],
+          content: [
+            { type: "text", text: `Could not fetch earthquake data: ${err.message}` },
+          ],
           isError: true,
         };
       }
@@ -176,7 +227,9 @@ const httpServer = createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/") {
-    res.writeHead(200, { "content-type": "text/plain" }).end("Weather MCP server is running");
+    res
+      .writeHead(200, { "content-type": "text/plain" })
+      .end("Earthquake Explorer MCP server is running");
     return;
   }
 
@@ -184,7 +237,7 @@ const httpServer = createServer(async (req, res) => {
   if (url.pathname.startsWith(MCP_PATH) && req.method && MCP_METHODS.has(req.method)) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
-    const server = createWeatherServer();
+    const server = createEarthquakeServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -207,5 +260,5 @@ const httpServer = createServer(async (req, res) => {
 });
 
 httpServer.listen(port, () => {
-  console.log(`Weather MCP server listening on http://localhost:${port}${MCP_PATH}`);
+  console.log(`Earthquake Explorer MCP server listening on http://localhost:${port}${MCP_PATH}`);
 });

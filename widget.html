@@ -2,248 +2,331 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Weather Widget</title>
+    <title>Earthquake Activity Explorer</title>
     <style>
       :root {
-        color-scheme: light;
+        color-scheme: dark;
         font-family: "Inter", system-ui, -apple-system, sans-serif;
       }
-      html, body { width: 100%; min-height: 100%; box-sizing: border-box; }
       * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        padding: 20px;
-        background: transparent;
-      }
+      html, body { width: 100%; }
+      body { margin: 0; padding: 20px; background: transparent; }
+
       main {
         width: 100%;
-        max-width: 380px;
+        max-width: 460px;
         margin: 0 auto;
-        border-radius: 24px;
-        padding: 24px;
-        color: #fff;
-        background: linear-gradient(160deg, #4f6bf6 0%, #7b5cf0 50%, #a855c9 100%);
-        box-shadow: 0 20px 40px -12px rgba(79, 70, 229, 0.45);
+        border-radius: 22px;
+        padding: 22px;
+        color: #f1f5f9;
+        background: linear-gradient(165deg, #1e293b 0%, #172033 55%, #221b2e 100%);
+        box-shadow: 0 22px 45px -14px rgba(2, 6, 23, 0.75);
         position: relative;
         overflow: hidden;
       }
       main::before {
         content: "";
-        position: absolute;
-        inset: 0;
-        background:
-          radial-gradient(circle at 85% -10%, rgba(255,255,255,0.35), transparent 45%),
-          radial-gradient(circle at -10% 110%, rgba(255,255,255,0.15), transparent 40%);
+        position: absolute; inset: 0;
+        background: radial-gradient(circle at 90% -15%, rgba(251, 146, 60, 0.22), transparent 50%);
         pointer-events: none;
       }
-      .header { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
+      .inner { position: relative; }
+
+      .eyebrow {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.09em;
+        text-transform: uppercase; color: #fb923c; margin-bottom: 4px;
+        display: flex; align-items: center; gap: 6px;
+      }
       h2 { margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
-      .subtitle { color: rgba(255,255,255,0.75); font-size: 0.78rem; margin-top: 2px; }
+      .subtitle { color: #94a3b8; font-size: 0.76rem; margin-top: 3px; }
 
-      .toggle {
-        display: inline-flex;
-        background: rgba(255,255,255,0.16);
-        border-radius: 999px;
-        padding: 3px;
-        backdrop-filter: blur(6px);
+      .stats {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+        margin: 18px 0 16px;
       }
-      .toggle button {
-        border: none;
-        background: transparent;
-        color: rgba(255,255,255,0.8);
-        padding: 5px 12px;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.2s ease, color 0.2s ease;
+      .stat {
+        background: rgba(148, 163, 184, 0.1);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        border-radius: 12px; padding: 10px 12px;
       }
-      .toggle button.active { background: #fff; color: #4f46e5; }
+      .stat-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; }
+      .stat-value { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
 
-      .current {
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin: 22px 0 20px;
+      .controls { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+      .chips { display: inline-flex; gap: 5px; }
+      .chip {
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: transparent; color: #cbd5e1;
+        border-radius: 999px; padding: 5px 11px;
+        font-size: 0.72rem; font-weight: 600; cursor: pointer;
+        transition: all 0.15s ease;
       }
-      .icon {
-        font-size: 2.6rem;
-        line-height: 1;
-        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
-      }
-      .temp { font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
-      .conditions { font-size: 0.95rem; font-weight: 600; margin-top: 4px; }
-      .meta-row { color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+      .chip:hover { border-color: rgba(251, 146, 60, 0.5); }
+      .chip.active { background: #fb923c; border-color: #fb923c; color: #1e293b; }
 
-      .forecast-card {
-        position: relative;
-        background: rgba(255,255,255,0.14);
-        backdrop-filter: blur(8px);
-        border-radius: 16px;
-        padding: 14px 16px;
+      .sort {
+        background: rgba(148, 163, 184, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #e2e8f0; border-radius: 9px;
+        padding: 5px 10px; font-size: 0.72rem; font-weight: 600;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+        white-space: nowrap;
       }
-      ul.forecast { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
-      ul.forecast li {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 9px 2px;
-        font-size: 0.86rem;
-        border-bottom: 1px solid rgba(255,255,255,0.12);
+      .sort:hover { border-color: rgba(251, 146, 60, 0.5); }
+
+      ul.quakes { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
+      li.quake {
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid rgba(148, 163, 184, 0.13);
+        border-radius: 13px; padding: 11px 13px;
+        cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease;
       }
-      ul.forecast li:last-child { border-bottom: none; }
-      .day-info { display: flex; align-items: center; gap: 8px; }
-      .day { font-weight: 700; width: 34px; }
-      .day-cond { color: rgba(255,255,255,0.7); font-size: 0.78rem; }
-      .day-temps { font-weight: 600; display: flex; gap: 6px; }
-      .day-temps .lo { color: rgba(255,255,255,0.65); font-weight: 500; }
+      li.quake:hover { border-color: rgba(251, 146, 60, 0.42); background: rgba(15, 23, 42, 0.72); }
+      li.quake.open { border-color: rgba(251, 146, 60, 0.6); }
+
+      .row { display: flex; align-items: center; gap: 11px; }
+      .mag {
+        min-width: 44px; height: 40px; border-radius: 10px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 0.98rem; line-height: 1; flex-shrink: 0;
+      }
+      .mag small { font-size: 0.5rem; font-weight: 600; opacity: 0.75; margin-top: 2px; letter-spacing: 0.04em; }
+      .mag.m4 { background: rgba(45, 212, 191, 0.16); color: #5eead4; }
+      .mag.m5 { background: rgba(250, 204, 21, 0.16); color: #fde047; }
+      .mag.m6 { background: rgba(251, 146, 60, 0.2); color: #fdba74; }
+      .mag.m7 { background: rgba(248, 113, 113, 0.22); color: #fca5a5; }
+
+      .place { flex: 1; min-width: 0; }
+      .place-name {
+        font-size: 0.84rem; font-weight: 600; line-height: 1.25;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .place-meta { font-size: 0.7rem; color: #94a3b8; margin-top: 2px; }
+      .chevron { color: #64748b; font-size: 0.7rem; flex-shrink: 0; transition: transform 0.2s ease; }
+      li.quake.open .chevron { transform: rotate(90deg); }
+
+      .detail {
+        display: none;
+        margin-top: 10px; padding-top: 10px;
+        border-top: 1px solid rgba(148, 163, 184, 0.15);
+        grid-template-columns: repeat(2, 1fr); gap: 7px 12px;
+      }
+      li.quake.open .detail { display: grid; }
+      .detail div { font-size: 0.71rem; }
+      .detail .k { color: #94a3b8; }
+      .detail .v { font-weight: 600; margin-top: 1px; }
+
+      .tsunami {
+        display: inline-block; margin-left: 6px;
+        background: rgba(56, 189, 248, 0.18); color: #7dd3fc;
+        border-radius: 5px; padding: 1px 5px; font-size: 0.6rem; font-weight: 700;
+      }
+
+      .empty { text-align: center; color: #94a3b8; font-size: 0.82rem; padding: 22px 0; }
+
+      .more {
+        width: 100%; margin-top: 9px;
+        background: transparent; border: 1px dashed rgba(148, 163, 184, 0.3);
+        color: #cbd5e1; border-radius: 10px; padding: 8px;
+        font-size: 0.75rem; font-weight: 600; cursor: pointer;
+      }
+      .more:hover { border-color: rgba(251, 146, 60, 0.5); color: #fdba74; }
 
       .refresh {
-        position: relative;
-        margin-top: 18px;
-        width: 100%;
-        border: none;
-        border-radius: 12px;
-        background: rgba(255,255,255,0.95);
-        color: #4f46e5;
-        font-weight: 700;
-        font-size: 0.88rem;
-        padding: 11px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        transition: transform 0.15s ease, background 0.15s ease;
+        margin-top: 14px; width: 100%; border: none; border-radius: 12px;
+        background: #fb923c; color: #1e293b; font-weight: 700; font-size: 0.85rem;
+        padding: 11px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        transition: background 0.15s ease, transform 0.15s ease;
       }
-      .refresh:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
-      .refresh:active:not(:disabled) { transform: translateY(0); }
-      .refresh:disabled { opacity: 0.7; cursor: not-allowed; }
+      .refresh:hover:not(:disabled) { background: #fdba74; transform: translateY(-1px); }
+      .refresh:disabled { opacity: 0.65; cursor: not-allowed; }
       .spinner {
-        width: 14px; height: 14px;
-        border: 2px solid rgba(79,70,229,0.25);
-        border-top-color: #4f46e5;
-        border-radius: 50%;
-        animation: spin 0.7s linear infinite;
-        display: none;
+        width: 13px; height: 13px; border: 2px solid rgba(30, 41, 59, 0.3);
+        border-top-color: #1e293b; border-radius: 50%;
+        animation: spin 0.7s linear infinite; display: none;
       }
       .refresh.loading .spinner { display: inline-block; }
       @keyframes spin { to { transform: rotate(360deg); } }
 
       .error {
-        position: relative;
-        color: #fff;
-        background: rgba(220, 38, 38, 0.35);
-        border-radius: 10px;
-        padding: 8px 12px;
-        font-size: 0.8rem;
-        margin-top: 10px;
-        display: none;
+        color: #fecaca; background: rgba(220, 38, 38, 0.2);
+        border-radius: 9px; padding: 8px 11px; font-size: 0.76rem;
+        margin-top: 9px; display: none;
       }
       .error.visible { display: block; }
-
-      .skeleton { opacity: 0.6; }
     </style>
   </head>
   <body>
     <main>
-      <div class="header">
-        <div>
-          <h2 id="city-name">Loading...</h2>
-          <div class="subtitle" id="updated-at"></div>
-        </div>
-        <div class="toggle">
-          <button id="unit-c" class="active">°C</button>
-          <button id="unit-f">°F</button>
-        </div>
-      </div>
+      <div class="inner">
+        <div class="eyebrow">🌍 Seismic activity</div>
+        <h2 id="region">Loading...</h2>
+        <div class="subtitle" id="subtitle"></div>
 
-      <div class="current">
-        <div class="icon" id="weather-icon">🌤️</div>
-        <div>
-          <div class="temp" id="current-temp">--</div>
-          <div class="conditions" id="current-conditions"></div>
-          <div class="meta-row" id="current-wind"></div>
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Events</div>
+            <div class="stat-value" id="stat-count">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Strongest</div>
+            <div class="stat-value" id="stat-max">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Window</div>
+            <div class="stat-value" id="stat-period">--</div>
+          </div>
         </div>
-      </div>
 
-      <div class="forecast-card">
-        <ul class="forecast" id="forecast-list"></ul>
-      </div>
+        <div class="controls">
+          <div class="chips">
+            <button class="chip active" data-filter="0">All</button>
+            <button class="chip" data-filter="5">M5+</button>
+            <button class="chip" data-filter="6">M6+</button>
+          </div>
+          <button class="sort" id="sort-btn">↓ Latest</button>
+        </div>
 
-      <button class="refresh" id="refresh-btn">
-        <span class="spinner"></span>
-        <span class="refresh-label">Refresh data</span>
-      </button>
-      <div class="error" id="error-box"></div>
+        <ul class="quakes" id="list"></ul>
+        <div class="empty" id="empty" style="display:none">No events match this filter.</div>
+
+        <button class="more" id="more-btn" style="display:none">Show all events</button>
+
+        <button class="refresh" id="refresh-btn">
+          <span class="spinner"></span>
+          <span class="refresh-label">Refresh data</span>
+        </button>
+        <div class="error" id="error-box"></div>
+      </div>
     </main>
 
     <script type="module">
-      let unit = "c"; // 'c' or 'f'
       let data = window.openai?.toolOutput ?? null;
+      let filter = 0;
+      let sortBy = "time"; // 'time' | 'magnitude'
+      let expanded = new Set();
+      let showAll = false;
 
-      const cToF = (c) => Math.round((c * 9) / 5 + 32);
+      const COLLAPSED_COUNT = 5;
 
-      const ICONS = [
-        { match: /thunder/i, icon: "⛈️" },
-        { match: /snow/i, icon: "❄️" },
-        { match: /drizzle|light rain/i, icon: "🌦️" },
-        { match: /rain|shower/i, icon: "🌧️" },
-        { match: /fog|rime/i, icon: "🌫️" },
-        { match: /overcast/i, icon: "☁️" },
-        { match: /partly/i, icon: "⛅" },
-        { match: /mainly clear/i, icon: "🌤️" },
-        { match: /clear/i, icon: "☀️" },
-      ];
-      const iconFor = (conditions) =>
-        ICONS.find((entry) => entry.match.test(conditions ?? ""))?.icon ?? "🌡️";
+      const magClass = (m) =>
+        m >= 7 ? "m7" : m >= 6 ? "m6" : m >= 5 ? "m5" : "m4";
+
+      const relTime = (iso) => {
+        const diff = Date.now() - new Date(iso).getTime();
+        const mins = Math.round(diff / 60000);
+        if (mins < 60) return `${Math.max(mins, 0)}m ago`;
+        const hrs = Math.round(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        return `${Math.round(hrs / 24)}d ago`;
+      };
+
+      const visibleQuakes = () => {
+        if (!data?.quakes) return [];
+        const filtered = data.quakes.filter((q) => q.magnitude >= filter);
+        const sorted = [...filtered].sort((a, b) =>
+          sortBy === "magnitude"
+            ? b.magnitude - a.magnitude
+            : new Date(b.time) - new Date(a.time)
+        );
+        return sorted;
+      };
 
       const render = () => {
         const errorBox = document.querySelector("#error-box");
         errorBox.classList.remove("visible");
-        errorBox.textContent = "";
 
         if (!data) {
-          document.querySelector("#city-name").textContent = "No data yet";
+          document.querySelector("#region").textContent = "No data yet";
           return;
         }
 
-        document.querySelector("#city-name").textContent = data.city;
-        document.querySelector("#updated-at").textContent =
-          "Updated " + new Date(data.updatedAt).toLocaleTimeString();
+        document.querySelector("#region").textContent = data.region;
+        document.querySelector("#subtitle").textContent =
+          `M${data.minMagnitude}+ · updated ${new Date(data.updatedAt).toLocaleTimeString()}`;
+        document.querySelector("#stat-count").textContent = data.count;
+        document.querySelector("#stat-max").textContent =
+          data.maxMagnitude ? `M${data.maxMagnitude}` : "--";
+        document.querySelector("#stat-period").textContent =
+          { hour: "1 hr", day: "24 hr", week: "7 days", month: "30 days" }[data.period] ?? data.period;
 
-        const t = unit === "c" ? data.currentTempC : cToF(data.currentTempC);
-        document.querySelector("#current-temp").textContent = `${t}°`;
-        document.querySelector("#current-conditions").textContent = data.conditions;
-        document.querySelector("#current-wind").textContent = `💨 ${data.windSpeedKmh} km/h`;
-        document.querySelector("#weather-icon").textContent = iconFor(data.conditions);
+        const all = visibleQuakes();
+        const shown = showAll ? all : all.slice(0, COLLAPSED_COUNT);
 
-        const list = document.querySelector("#forecast-list");
+        const list = document.querySelector("#list");
         list.innerHTML = "";
-        (data.forecast || []).forEach((day) => {
-          const hi = unit === "c" ? day.highC : cToF(day.highC);
-          const lo = unit === "c" ? day.lowC : cToF(day.lowC);
+        shown.forEach((q) => {
           const li = document.createElement("li");
+          li.className = "quake" + (expanded.has(q.id) ? " open" : "");
+          li.dataset.id = q.id;
           li.innerHTML = `
-            <span class="day-info">
-              <span class="day">${day.day}</span>
-              <span class="day-cond">${iconFor(day.conditions)} ${day.conditions}</span>
-            </span>
-            <span class="day-temps"><span class="hi">${hi}°</span><span class="lo">${lo}°</span></span>
+            <div class="row">
+              <div class="mag ${magClass(q.magnitude)}">${q.magnitude.toFixed(1)}<small>MAG</small></div>
+              <div class="place">
+                <div class="place-name">${q.place}${q.tsunami ? '<span class="tsunami">TSUNAMI</span>' : ""}</div>
+                <div class="place-meta">${relTime(q.time)} · ${q.depthKm} km deep</div>
+              </div>
+              <div class="chevron">▶</div>
+            </div>
+            <div class="detail">
+              <div><div class="k">Local time</div><div class="v">${new Date(q.time).toLocaleString()}</div></div>
+              <div><div class="k">Depth</div><div class="v">${q.depthKm} km</div></div>
+              <div><div class="k">Latitude</div><div class="v">${q.lat}°</div></div>
+              <div><div class="k">Longitude</div><div class="v">${q.lon}°</div></div>
+            </div>
           `;
           list.appendChild(li);
         });
+
+        document.querySelector("#empty").style.display = all.length ? "none" : "block";
+
+        const moreBtn = document.querySelector("#more-btn");
+        if (all.length > COLLAPSED_COUNT) {
+          moreBtn.style.display = "block";
+          moreBtn.textContent = showAll
+            ? "Show fewer"
+            : `Show all ${all.length} events`;
+        } else {
+          moreBtn.style.display = "none";
+        }
       };
 
-      const setUnit = (u) => {
-        unit = u;
-        document.querySelector("#unit-c").classList.toggle("active", u === "c");
-        document.querySelector("#unit-f").classList.toggle("active", u === "f");
+      // Filter chips
+      document.querySelectorAll(".chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+          chip.classList.add("active");
+          filter = Number(chip.dataset.filter);
+          showAll = false;
+          render();
+        });
+      });
+
+      // Sort toggle
+      document.querySelector("#sort-btn").addEventListener("click", (e) => {
+        sortBy = sortBy === "time" ? "magnitude" : "time";
+        e.currentTarget.textContent = sortBy === "time" ? "↓ Latest" : "↓ Strongest";
         render();
-      };
+      });
 
-      document.querySelector("#unit-c").addEventListener("click", () => setUnit("c"));
-      document.querySelector("#unit-f").addEventListener("click", () => setUnit("f"));
+      // Show more / fewer
+      document.querySelector("#more-btn").addEventListener("click", () => {
+        showAll = !showAll;
+        render();
+      });
 
+      // Expand a row for detail
+      document.querySelector("#list").addEventListener("click", (event) => {
+        const li = event.target.closest("li.quake");
+        if (!li) return;
+        const id = li.dataset.id;
+        if (expanded.has(id)) expanded.delete(id);
+        else expanded.add(id);
+        render();
+      });
+
+      // Round-trip back into the MCP tool for fresh data
       document.querySelector("#refresh-btn").addEventListener("click", async () => {
         const btn = document.querySelector("#refresh-btn");
         const label = btn.querySelector(".refresh-label");
@@ -253,11 +336,14 @@
         label.textContent = "Refreshing...";
         try {
           if (window.openai?.callTool) {
-            const response = await window.openai.callTool("get_weather", {
-              city: data?.city ?? "Montreal",
+            const response = await window.openai.callTool("explore_earthquakes", {
+              region: data?.query ?? undefined,
+              minMagnitude: data?.minMagnitude ?? 4.5,
+              period: data?.period ?? "day",
             });
             if (response?.structuredContent) {
               data = response.structuredContent;
+              expanded = new Set();
               render();
             }
           }
@@ -276,6 +362,8 @@
         const globals = event.detail?.globals;
         if (!globals?.toolOutput) return;
         data = globals.toolOutput;
+        expanded = new Set();
+        showAll = false;
         render();
       });
 
