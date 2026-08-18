@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Weather Widget</title>
+    <style>
+      :root {
+        color: #0b0b0f;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+      }
+      html, body { width: 100%; min-height: 100%; box-sizing: border-box; }
+      body { margin: 0; padding: 16px; background: #f6f8fb; }
+      main {
+        width: 100%; max-width: 380px; margin: 0 auto;
+        background: #fff; border-radius: 16px; padding: 20px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+      }
+      h2 { margin: 0 0 4px; font-size: 1.25rem; }
+      .subtitle { color: #6c768a; font-size: 0.85rem; margin-bottom: 16px; }
+      .current {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #f2f4fb; border-radius: 12px; padding: 16px; margin-bottom: 16px;
+      }
+      .temp { font-size: 2.2rem; font-weight: 700; }
+      .meta { text-align: right; font-size: 0.8rem; color: #6c768a; }
+      .toggle {
+        display: inline-flex; border: 1px solid #cad3e0; border-radius: 8px; overflow: hidden;
+        margin-bottom: 16px;
+      }
+      .toggle button {
+        border: none; background: #fff; padding: 6px 12px; cursor: pointer; font-size: 0.85rem;
+      }
+      .toggle button.active { background: #111bf5; color: #fff; }
+      ul.forecast { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+      ul.forecast li {
+        display: flex; justify-content: space-between; align-items: center;
+        background: #f9fafc; border-radius: 10px; padding: 10px 14px; font-size: 0.9rem;
+      }
+      .day { font-weight: 600; }
+      .refresh {
+        margin-top: 16px; width: 100%; border: none; border-radius: 10px;
+        background: #111bf5; color: #fff; font-weight: 600; padding: 10px; cursor: pointer;
+      }
+      .refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+      .error { color: #c0392b; font-size: 0.85rem; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h2 id="city-name">Loading...</h2>
+      <div class="subtitle" id="updated-at"></div>
+
+      <div class="current">
+        <div class="temp" id="current-temp">--</div>
+        <div class="meta" id="current-meta"></div>
+      </div>
+
+      <div class="toggle">
+        <button id="unit-c" class="active">°C</button>
+        <button id="unit-f">°F</button>
+      </div>
+
+      <ul class="forecast" id="forecast-list"></ul>
+
+      <button class="refresh" id="refresh-btn">Refresh data</button>
+      <div class="error" id="error-box"></div>
+    </main>
+
+    <script type="module">
+      let unit = "c"; // 'c' or 'f'
+      let data = window.openai?.toolOutput ?? null;
+
+      const cToF = (c) => Math.round((c * 9) / 5 + 32);
+
+      const render = () => {
+        const errorBox = document.querySelector("#error-box");
+        errorBox.textContent = "";
+
+        if (!data) {
+          document.querySelector("#city-name").textContent = "No data yet";
+          return;
+        }
+
+        document.querySelector("#city-name").textContent = data.city;
+        document.querySelector("#updated-at").textContent =
+          "Updated " + new Date(data.updatedAt).toLocaleTimeString();
+
+        const t = unit === "c" ? data.currentTempC : cToF(data.currentTempC);
+        document.querySelector("#current-temp").textContent = `${t}°${unit.toUpperCase()}`;
+        document.querySelector("#current-meta").innerHTML =
+          `Wind: ${data.windSpeedKmh} km/h<br/>${data.conditions}`;
+
+        const list = document.querySelector("#forecast-list");
+        list.innerHTML = "";
+        (data.forecast || []).forEach((day) => {
+          const li = document.createElement("li");
+          const hi = unit === "c" ? day.highC : cToF(day.highC);
+          const lo = unit === "c" ? day.lowC : cToF(day.lowC);
+          li.innerHTML = `<span class="day">${day.day}</span><span>${hi}° / ${lo}°</span>`;
+          list.appendChild(li);
+        });
+      };
+
+      const setUnit = (u) => {
+        unit = u;
+        document.querySelector("#unit-c").classList.toggle("active", u === "c");
+        document.querySelector("#unit-f").classList.toggle("active", u === "f");
+        render();
+      };
+
+      document.querySelector("#unit-c").addEventListener("click", () => setUnit("c"));
+      document.querySelector("#unit-f").addEventListener("click", () => setUnit("f"));
+
+      document.querySelector("#refresh-btn").addEventListener("click", async () => {
+        const btn = document.querySelector("#refresh-btn");
+        const errorBox = document.querySelector("#error-box");
+        btn.disabled = true;
+        btn.textContent = "Refreshing...";
+        try {
+          if (window.openai?.callTool) {
+            const response = await window.openai.callTool("get_weather", {
+              city: data?.city ?? "Montreal",
+            });
+            if (response?.structuredContent) {
+              data = response.structuredContent;
+              render();
+            }
+          }
+        } catch (err) {
+          errorBox.textContent = "Failed to refresh: " + err.message;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Refresh data";
+        }
+      });
+
+      // Keep in sync with host-driven global updates
+      window.addEventListener("openai:set_globals", (event) => {
+        const globals = event.detail?.globals;
+        if (!globals?.toolOutput) return;
+        data = globals.toolOutput;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
