@@ -78,7 +78,18 @@ function createWeatherServer() {
   server.registerResource(
     "weather-widget",
     "ui://widget/weather.html",
-    {},
+    {
+      title: "Weather widget",
+      description: "Interactive current conditions and 5-day forecast card.",
+      mimeType: "text/html+skybridge",
+      _meta: {
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetCSP": {
+          connect_domains: [],
+          resource_domains: [],
+        },
+      },
+    },
     async () => ({
       contents: [
         {
