@@ -138,6 +138,9 @@ function createWeatherServer() {
             },
           ],
           structuredContent: result,
+          _meta: {
+            "openai/outputTemplate": "ui://widget/weather.html",
+          },
         };
       } catch (err) {
         return {
