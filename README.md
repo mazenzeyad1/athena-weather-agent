@@ -7,6 +7,19 @@ widget embedded directly in the Athena chat.
 
 **Live MCP endpoint:** `https://athena-weather-agent.onrender.com/mcp`
 
+## Project notes
+
+This project is a small MCP server that exposes a single live data tool and a UI
+widget. The server fetches public seismic data from the USGS and Open-Meteo APIs,
+then returns both a machine-readable payload and a skybridge HTML widget for Athena
+to render directly in the chat.
+
+The main idea is simple:
+- the server exposes `explore_earthquakes`
+- the tool resolves the region to coordinates
+- the app queries the USGS earthquake feed for recent events
+- the widget renders the event list with filters, sorting, and refresh behavior
+
 ## What it does
 
 The `explore_earthquakes` tool queries live seismic events and returns both a
@@ -67,11 +80,42 @@ Or call it directly:
 curl -s http://localhost:8787/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_earthquakes","arguments":{"region":"Japan","period":"month"}}}'
 ```
 
+## Quick start
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Start the server locally:
+   ```bash
+   node server.js
+   ```
+3. Test the endpoint:
+   ```bash
+   curl -s http://localhost:8787/ 
+   ```
+4. Query the MCP tool directly:
+   ```bash
+   curl -s http://localhost:8787/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_earthquakes","arguments":{"region":"Japan","period":"month"}}}'
+   ```
+
 ## Deployment
 
 Deployed on Render as a web service (build `npm install`, start `npm start`),
 which gives a permanent HTTPS URL — no ngrok tunnel required, so the agent keeps
 working after the dev machine is off.
+
+## Troubleshooting
+
+- If the server does not respond on localhost, confirm that port `8787` is free and
+  that `node server.js` started without errors.
+- If a region returns no results, try a broader name such as `Japan`, `California`,
+  or `Turkey` instead of a very small locality.
+- If Athena does not render the widget, re-add the MCP connector after changing the
+  server metadata so Athena refreshes `tools/list` and `resources/list`.
+- If the widget appears as plain text, verify that the resource registration includes
+  `mimeType: "text/html+skybridge"` and that the tool sets the output template to
+  the widget resource URI.
 
 ## Connecting to Athena
 

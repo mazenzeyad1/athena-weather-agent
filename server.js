@@ -4,11 +4,14 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 
+// Load the embedded HTML widget so the MCP resource can return a self-contained
+// UI that Athena can render inline in the chat experience.
 const widgetHtml = readFileSync(
   new URL("./widget.html", import.meta.url),
   "utf8"
 );
 
+// Time windows used by the public USGS API when a user asks for recent quakes.
 const PERIOD_MS = {
   hour: 60 * 60 * 1000,
   day: 24 * 60 * 60 * 1000,
@@ -18,24 +21,77 @@ const PERIOD_MS = {
 
 const SEARCH_RADIUS_KM = 1500;
 const MAX_EVENTS = 20;
+const FETCH_TIMEOUT_MS = 8000;
+
+// Geocoding answers are stable enough to cache per process so repeated lookups
+// for the same region do not trigger extra network requests.
+const geocodeCache = new Map();
+
+// The geocoder does not know about Türkiye as a country entry, so redirect those
+// aliases to the capital city for a reliable coordinate match.
+const REGION_ALIASES = {
+  turkey: "Ankara",
+  türkiye: "Ankara",
+  turkiye: "Ankara",
+};
+
+// Prefer a country, then a capital, then an admin centre, over a tiny hamlet
+// that happens to share the name (e.g. "Turkey", North Carolina).
+function placeRank(featureCode = "") {
+  if (featureCode.startsWith("PCL")) return 0;
+  if (featureCode === "PPLC") return 1;
+  if (featureCode.startsWith("PPLA") || featureCode.startsWith("ADM")) return 2;
+  return 3;
+}
+
+// Upstream APIs occasionally blip; fail fast and retry once rather than hanging.
+async function fetchWithRetry(url, label) {
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`${label} returned ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      lastError = err;
+      if (err.name === "TimeoutError") lastError = new Error(`${label} timed out`);
+    }
+  }
+  throw lastError;
+}
 
 // Resolve a place name to coordinates so we can search a region, not just the globe.
 async function geocodeRegion(region) {
-  const res = await fetch(
+  const key = region.trim().toLowerCase();
+  if (geocodeCache.has(key)) return geocodeCache.get(key);
+
+  const query = REGION_ALIASES[key] ?? region;
+  const data = await fetchWithRetry(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-      region
-    )}&count=1&language=en&format=json`
+      query
+    )}&count=10&language=en&format=json`,
+    "Geocoding"
   );
-  if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
-  const data = await res.json();
-  const place = data?.results?.[0];
+
+  // Rank candidates so a country beats a same-named village, then prefer the
+  // most populated match within the same tier.
+  const place = (data?.results ?? [])
+    .slice()
+    .sort(
+      (a, b) =>
+        placeRank(a.feature_code) - placeRank(b.feature_code) ||
+        (b.population ?? 0) - (a.population ?? 0)
+    )[0];
   if (!place) throw new Error(`Could not find region: ${region}`);
+
   const parts = [place.name, place.country].filter(Boolean);
-  return {
+  const resolved = {
     label: [...new Set(parts)].join(", "),
     latitude: place.latitude,
     longitude: place.longitude,
   };
+  geocodeCache.set(key, resolved);
+  return resolved;
 }
 
 // --- Real business logic: live seismic events from the USGS FDSN event API ---
@@ -63,11 +119,10 @@ async function fetchEarthquakes({ region, minMagnitude, period }) {
     params.set("maxradiuskm", String(SEARCH_RADIUS_KM));
   }
 
-  const res = await fetch(
-    `https://earthquake.usgs.gov/fdsnws/event/1/query?${params.toString()}`
+  const data = await fetchWithRetry(
+    `https://earthquake.usgs.gov/fdsnws/event/1/query?${params.toString()}`,
+    "USGS catalog"
   );
-  if (!res.ok) throw new Error(`USGS query failed: ${res.status}`);
-  const data = await res.json();
 
   const quakes = (data.features ?? []).map((feature) => {
     const [lon, lat, depth] = feature.geometry?.coordinates ?? [];
@@ -104,8 +159,11 @@ async function fetchEarthquakes({ region, minMagnitude, period }) {
 }
 
 function createEarthquakeServer() {
+  // Build a fresh MCP server instance for each request so the service stays
+  // stateless and easy to restart or redeploy without background state leaks.
   const server = new McpServer({ name: "earthquake-explorer", version: "1.0.0" });
 
+  // Register the widget resource that Athena discovers for inline UI rendering.
   server.registerResource(
     "earthquake-widget",
     "ui://widget/earthquakes.html",
@@ -139,6 +197,8 @@ function createEarthquakeServer() {
     })
   );
 
+  // Register the main tool that the agent calls when a user asks about seismic
+  // activity. It returns a short text summary plus structured event data.
   server.registerTool(
     "explore_earthquakes",
     {
@@ -208,6 +268,9 @@ function createEarthquakeServer() {
 const port = Number(process.env.PORT ?? 8787);
 const MCP_PATH = "/mcp";
 
+// Run a lightweight HTTP server that exposes the MCP endpoint over a normal web
+// port. This keeps the project deployable as a simple Render service without a
+// custom adapter layer.
 const httpServer = createServer(async (req, res) => {
   if (!req.url) {
     res.writeHead(400).end("Missing URL");

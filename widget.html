@@ -206,6 +206,8 @@
     </main>
 
     <script type="module">
+      // Widget state is driven by the host tool output and kept in sync if Athena
+      // updates the shared globals object after the initial render.
       let data = window.openai?.toolOutput ?? null;
       let filter = 0;
       let sortBy = "time"; // 'time' | 'magnitude'
@@ -237,7 +239,10 @@
         return sorted;
       };
 
-      // Ask the host to shrink/grow the iframe to match our actual content.
+      // Offer the host our content height. Athena does not currently implement
+      // notifyIntrinsicHeight (it fixes the iframe height itself), so this is a
+      // no-op there and the CSS stretches the panel to fill instead. Kept because
+      // it costs nothing and improves layout on hosts that do support it.
       const notifyHeight = () => {
         const card = document.querySelector("main");
         if (!card) return;
@@ -245,6 +250,8 @@
         window.openai?.notifyIntrinsicHeight?.(height);
       };
 
+      // Repaint the widget whenever the data, filter, sorting, or expansion state
+      // changes. This keeps the UI responsive without a framework.
       const render = () => {
         const errorBox = document.querySelector("#error-box");
         errorBox.classList.remove("visible");
@@ -306,7 +313,8 @@
         notifyHeight();
       };
 
-      // Filter chips
+      // Filter chips let the user quickly focus on stronger events without making
+      // another fetch call. The data remains client-side and updates instantly.
       document.querySelectorAll(".chip").forEach((chip) => {
         chip.addEventListener("click", () => {
           document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
@@ -317,20 +325,20 @@
         });
       });
 
-      // Sort toggle
+      // Sort toggle flips between newest-first and strongest-first ordering.
       document.querySelector("#sort-btn").addEventListener("click", (e) => {
         sortBy = sortBy === "time" ? "magnitude" : "time";
         e.currentTarget.textContent = sortBy === "time" ? "↓ Latest" : "↓ Strongest";
         render();
       });
 
-      // Show more / fewer
+      // Expand or collapse the list for large result sets while preserving a clean UI.
       document.querySelector("#more-btn").addEventListener("click", () => {
         showAll = !showAll;
         render();
       });
 
-      // Expand a row for detail
+      // Expand a row to reveal the exact timestamp, depth, and coordinates.
       document.querySelector("#list").addEventListener("click", (event) => {
         const li = event.target.closest("li.quake");
         if (!li) return;
@@ -340,7 +348,8 @@
         render();
       });
 
-      // Round-trip back into the MCP tool for fresh data
+      // Refresh reuses the last query parameters and calls back through the host API
+      // to pull a fresh snapshot from the live earthquake source.
       document.querySelector("#refresh-btn").addEventListener("click", async () => {
         const btn = document.querySelector("#refresh-btn");
         const label = btn.querySelector(".refresh-label");
@@ -371,7 +380,8 @@
         }
       });
 
-      // Keep in sync with host-driven global updates
+      // Keep the widget in sync with host-driven global updates if Athena passes a
+      // newly refreshed tool output object after the initial load.
       window.addEventListener("openai:set_globals", (event) => {
         const globals = event.detail?.globals;
         if (!globals?.toolOutput) return;
