@@ -5,64 +5,175 @@
     <title>Weather Widget</title>
     <style>
       :root {
-        color: #0b0b0f;
+        color-scheme: light;
         font-family: "Inter", system-ui, -apple-system, sans-serif;
       }
       html, body { width: 100%; min-height: 100%; box-sizing: border-box; }
-      body { margin: 0; padding: 16px; background: #f6f8fb; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 20px;
+        background: transparent;
+      }
       main {
-        width: 100%; max-width: 380px; margin: 0 auto;
-        background: #fff; border-radius: 16px; padding: 20px;
-        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+        width: 100%;
+        max-width: 380px;
+        margin: 0 auto;
+        border-radius: 24px;
+        padding: 24px;
+        color: #fff;
+        background: linear-gradient(160deg, #4f6bf6 0%, #7b5cf0 50%, #a855c9 100%);
+        box-shadow: 0 20px 40px -12px rgba(79, 70, 229, 0.45);
+        position: relative;
+        overflow: hidden;
       }
-      h2 { margin: 0 0 4px; font-size: 1.25rem; }
-      .subtitle { color: #6c768a; font-size: 0.85rem; margin-bottom: 16px; }
-      .current {
-        display: flex; align-items: center; justify-content: space-between;
-        background: #f2f4fb; border-radius: 12px; padding: 16px; margin-bottom: 16px;
+      main::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 85% -10%, rgba(255,255,255,0.35), transparent 45%),
+          radial-gradient(circle at -10% 110%, rgba(255,255,255,0.15), transparent 40%);
+        pointer-events: none;
       }
-      .temp { font-size: 2.2rem; font-weight: 700; }
-      .meta { text-align: right; font-size: 0.8rem; color: #6c768a; }
+      .header { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
+      h2 { margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
+      .subtitle { color: rgba(255,255,255,0.75); font-size: 0.78rem; margin-top: 2px; }
+
       .toggle {
-        display: inline-flex; border: 1px solid #cad3e0; border-radius: 8px; overflow: hidden;
-        margin-bottom: 16px;
+        display: inline-flex;
+        background: rgba(255,255,255,0.16);
+        border-radius: 999px;
+        padding: 3px;
+        backdrop-filter: blur(6px);
       }
       .toggle button {
-        border: none; background: #fff; padding: 6px 12px; cursor: pointer; font-size: 0.85rem;
+        border: none;
+        background: transparent;
+        color: rgba(255,255,255,0.8);
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease;
       }
-      .toggle button.active { background: #111bf5; color: #fff; }
-      ul.forecast { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+      .toggle button.active { background: #fff; color: #4f46e5; }
+
+      .current {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 22px 0 20px;
+      }
+      .icon {
+        font-size: 2.6rem;
+        line-height: 1;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+      }
+      .temp { font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+      .conditions { font-size: 0.95rem; font-weight: 600; margin-top: 4px; }
+      .meta-row { color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+
+      .forecast-card {
+        position: relative;
+        background: rgba(255,255,255,0.14);
+        backdrop-filter: blur(8px);
+        border-radius: 16px;
+        padding: 14px 16px;
+      }
+      ul.forecast { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
       ul.forecast li {
         display: flex; justify-content: space-between; align-items: center;
-        background: #f9fafc; border-radius: 10px; padding: 10px 14px; font-size: 0.9rem;
+        padding: 9px 2px;
+        font-size: 0.86rem;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
       }
-      .day { font-weight: 600; }
+      ul.forecast li:last-child { border-bottom: none; }
+      .day-info { display: flex; align-items: center; gap: 8px; }
+      .day { font-weight: 700; width: 34px; }
+      .day-cond { color: rgba(255,255,255,0.7); font-size: 0.78rem; }
+      .day-temps { font-weight: 600; display: flex; gap: 6px; }
+      .day-temps .lo { color: rgba(255,255,255,0.65); font-weight: 500; }
+
       .refresh {
-        margin-top: 16px; width: 100%; border: none; border-radius: 10px;
-        background: #111bf5; color: #fff; font-weight: 600; padding: 10px; cursor: pointer;
+        position: relative;
+        margin-top: 18px;
+        width: 100%;
+        border: none;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.95);
+        color: #4f46e5;
+        font-weight: 700;
+        font-size: 0.88rem;
+        padding: 11px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: transform 0.15s ease, background 0.15s ease;
       }
-      .refresh:disabled { opacity: 0.6; cursor: not-allowed; }
-      .error { color: #c0392b; font-size: 0.85rem; margin-top: 8px; }
+      .refresh:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
+      .refresh:active:not(:disabled) { transform: translateY(0); }
+      .refresh:disabled { opacity: 0.7; cursor: not-allowed; }
+      .spinner {
+        width: 14px; height: 14px;
+        border: 2px solid rgba(79,70,229,0.25);
+        border-top-color: #4f46e5;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: none;
+      }
+      .refresh.loading .spinner { display: inline-block; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      .error {
+        position: relative;
+        color: #fff;
+        background: rgba(220, 38, 38, 0.35);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        margin-top: 10px;
+        display: none;
+      }
+      .error.visible { display: block; }
+
+      .skeleton { opacity: 0.6; }
     </style>
   </head>
   <body>
     <main>
-      <h2 id="city-name">Loading...</h2>
-      <div class="subtitle" id="updated-at"></div>
+      <div class="header">
+        <div>
+          <h2 id="city-name">Loading...</h2>
+          <div class="subtitle" id="updated-at"></div>
+        </div>
+        <div class="toggle">
+          <button id="unit-c" class="active">°C</button>
+          <button id="unit-f">°F</button>
+        </div>
+      </div>
 
       <div class="current">
-        <div class="temp" id="current-temp">--</div>
-        <div class="meta" id="current-meta"></div>
+        <div class="icon" id="weather-icon">🌤️</div>
+        <div>
+          <div class="temp" id="current-temp">--</div>
+          <div class="conditions" id="current-conditions"></div>
+          <div class="meta-row" id="current-wind"></div>
+        </div>
       </div>
 
-      <div class="toggle">
-        <button id="unit-c" class="active">°C</button>
-        <button id="unit-f">°F</button>
+      <div class="forecast-card">
+        <ul class="forecast" id="forecast-list"></ul>
       </div>
 
-      <ul class="forecast" id="forecast-list"></ul>
-
-      <button class="refresh" id="refresh-btn">Refresh data</button>
+      <button class="refresh" id="refresh-btn">
+        <span class="spinner"></span>
+        <span class="refresh-label">Refresh data</span>
+      </button>
       <div class="error" id="error-box"></div>
     </main>
 
@@ -72,8 +183,23 @@
 
       const cToF = (c) => Math.round((c * 9) / 5 + 32);
 
+      const ICONS = [
+        { match: /thunder/i, icon: "⛈️" },
+        { match: /snow/i, icon: "❄️" },
+        { match: /drizzle|light rain/i, icon: "🌦️" },
+        { match: /rain|shower/i, icon: "🌧️" },
+        { match: /fog|rime/i, icon: "🌫️" },
+        { match: /overcast/i, icon: "☁️" },
+        { match: /partly/i, icon: "⛅" },
+        { match: /mainly clear/i, icon: "🌤️" },
+        { match: /clear/i, icon: "☀️" },
+      ];
+      const iconFor = (conditions) =>
+        ICONS.find((entry) => entry.match.test(conditions ?? ""))?.icon ?? "🌡️";
+
       const render = () => {
         const errorBox = document.querySelector("#error-box");
+        errorBox.classList.remove("visible");
         errorBox.textContent = "";
 
         if (!data) {
@@ -86,17 +212,24 @@
           "Updated " + new Date(data.updatedAt).toLocaleTimeString();
 
         const t = unit === "c" ? data.currentTempC : cToF(data.currentTempC);
-        document.querySelector("#current-temp").textContent = `${t}°${unit.toUpperCase()}`;
-        document.querySelector("#current-meta").innerHTML =
-          `Wind: ${data.windSpeedKmh} km/h<br/>${data.conditions}`;
+        document.querySelector("#current-temp").textContent = `${t}°`;
+        document.querySelector("#current-conditions").textContent = data.conditions;
+        document.querySelector("#current-wind").textContent = `💨 ${data.windSpeedKmh} km/h`;
+        document.querySelector("#weather-icon").textContent = iconFor(data.conditions);
 
         const list = document.querySelector("#forecast-list");
         list.innerHTML = "";
         (data.forecast || []).forEach((day) => {
-          const li = document.createElement("li");
           const hi = unit === "c" ? day.highC : cToF(day.highC);
           const lo = unit === "c" ? day.lowC : cToF(day.lowC);
-          li.innerHTML = `<span class="day">${day.day}</span><span>${hi}° / ${lo}°</span>`;
+          const li = document.createElement("li");
+          li.innerHTML = `
+            <span class="day-info">
+              <span class="day">${day.day}</span>
+              <span class="day-cond">${iconFor(day.conditions)} ${day.conditions}</span>
+            </span>
+            <span class="day-temps"><span class="hi">${hi}°</span><span class="lo">${lo}°</span></span>
+          `;
           list.appendChild(li);
         });
       };
@@ -113,9 +246,11 @@
 
       document.querySelector("#refresh-btn").addEventListener("click", async () => {
         const btn = document.querySelector("#refresh-btn");
+        const label = btn.querySelector(".refresh-label");
         const errorBox = document.querySelector("#error-box");
         btn.disabled = true;
-        btn.textContent = "Refreshing...";
+        btn.classList.add("loading");
+        label.textContent = "Refreshing...";
         try {
           if (window.openai?.callTool) {
             const response = await window.openai.callTool("get_weather", {
@@ -128,9 +263,11 @@
           }
         } catch (err) {
           errorBox.textContent = "Failed to refresh: " + err.message;
+          errorBox.classList.add("visible");
         } finally {
           btn.disabled = false;
-          btn.textContent = "Refresh data";
+          btn.classList.remove("loading");
+          label.textContent = "Refresh data";
         }
       });
 
