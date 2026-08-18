@@ -85,7 +85,13 @@ function createWeatherServer() {
           uri: "ui://widget/weather.html",
           mimeType: "text/html+skybridge",
           text: widgetHtml,
-          _meta: { "openai/widgetPrefersBorder": true },
+          _meta: {
+            "openai/widgetPrefersBorder": true,
+            "openai/widgetCSP": {
+              connect_domains: [],
+              resource_domains: [],
+            },
+          },
         },
       ],
     })
